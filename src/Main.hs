@@ -19,6 +19,7 @@ import qualified Snap.Snaplet as Snaplet
 import qualified Snap.Snaplet.Session.Backends.CookieSession as CookieSession
 import           Data.ByteString (ByteString)
 import qualified Snap as S
+-- import qualified Snap.Snaplet.Persistent as SnapletPersistent
 import Snap.Util.FileServe (serveDirectory)
 
 data App = App 
@@ -28,13 +29,12 @@ data App = App
 Lens.makeLenses ''App
 
 TH.share [TH.mkPersist TH.sqlSettings, TH.mkMigrate "migrateAll"] [TH.persistLowerCase|
-Person
-    name String
-    age Int Maybe
+Usr
+    login String
     deriving Show
-BlogPost
-    title String
-    authorId PersonId
+Link
+    url String
+    authorId UsrId
     deriving Show
 |]
 
