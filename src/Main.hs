@@ -13,9 +13,19 @@ import Control.Monad.IO.Class  (liftIO)
 import qualified Database.Persist as Persist
 import qualified Database.Persist.Sqlite as Sqlite
 import qualified Database.Persist.TH as TH
-
-import          Snap
+import qualified Snap.Snaplet.Session as Sess
+import qualified Control.Lens as Lens
+import qualified Snap.Snaplet as Snaplet
+import qualified Snap.Snaplet.Session.Backends.CookieSession as CookieSession
+import           Data.ByteString (ByteString)
+import qualified Snap as S
 import Snap.Util.FileServe (serveDirectory)
+
+data App = App 
+    { _sess ::  S.Snaplet Sess.SessionManager
+    }
+
+Lens.makeLenses ''App
 
 TH.share [TH.mkPersist TH.sqlSettings, TH.mkMigrate "migrateAll"] [TH.persistLowerCase|
 Person
@@ -28,22 +38,39 @@ BlogPost
     deriving Show
 |]
 
+someRoute :: S.Handler App App ()
+someRoute = do
+    S.writeBS "erm"
+
+routes = [("/foo", someRoute)]
+
+app :: Snaplet.SnapletInit App App
+app = Snaplet.makeSnaplet "app" "yeah" Nothing $ do
+    s <- Snaplet.nestSnaplet "sess" sess $
+        CookieSession.initCookieSessionManager "site_key.txt" "sess" (Just 3600)
+    S.addRoutes routes
+    return $ App s
+
+main = Snaplet.serveSnaplet S.defaultConfig app
+
+{- 
 main :: IO ()
 main = do
     Sqlite.runSqlite ":memory:" $ do
         Sqlite.runMigration migrateAll   
-    quickHttpServe site
+    S.quickHttpServe site
+-}
 
-site :: Snap ()
+site :: S.Snap ()
 site =
-    ifTop (writeBS "hello world") <|>
-    route [ ("foo", writeBS "bar")
+    S.ifTop (S.writeBS "hello world") S.<|>
+    S.route [ ("foo", S.writeBS "bar")
           , ("echo/:echoparam", echoHandler)
-          ] <|>
-    dir "static" (serveDirectory ".")
+          ] S.<|>
+    S.dir "static" (serveDirectory ".")
 
-echoHandler :: Snap ()
+echoHandler :: S.Snap ()
 echoHandler = do
-    param <- getParam "echoparam"
-    maybe (writeBS "must specify echo/param in URL")
-          writeBS param
+    param <- S.getParam "echoparam"
+    maybe (S.writeBS "must specify echo/param in URL")
+          S.writeBS param
