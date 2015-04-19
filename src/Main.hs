@@ -22,7 +22,7 @@ import qualified Data.ByteString as ByteString
 import           Data.ByteString (ByteString)
 import qualified Snap as S
 -- import qualified Snap.Snaplet.Persistent as SnapletPersistent
-import Snap.Util.FileServe (serveDirectory)
+import Snap.Util.FileServe (serveDirectory, serveFile)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as Text
@@ -47,7 +47,17 @@ type MyHandler = S.Handler App App ()
 
 someRoute :: MyHandler
 someRoute = do
-    S.writeBS "<html><form method='post' action='/login'>Who is you<br><input type='text' name='user'><input type='submit' value='Submit'></form></html>"
+    maybe_sess <- S.with sess $ Sess.getFromSession "user"
+    let sess = fromMaybe "" maybe_sess
+    S.writeBS $ ByteString.concat 
+        [ "<head>"
+        , "<script>window.user = '", (encodeUtf8 sess), "'</script>"
+        , "</head>"
+        , "<html>"
+        , "<div id='react_hook'></div>"
+        , "</html>"  
+        , "<script src='/frontend.js'></script>"
+        ]
 
 authHandler :: MyHandler
 authHandler = do
@@ -76,6 +86,7 @@ routes =
     [ ("/", someRoute)
     , ("/login", authHandler)
     , ("/pins", auth pinsHandler)
+    , ("/frontend.js", serveFile "./frontend/dist/app.js")
     ]
 
 app :: Snaplet.SnapletInit App App

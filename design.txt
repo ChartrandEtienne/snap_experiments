@@ -1,0 +1,37 @@
+Right. 
+
+So I have a page with a login form. 
+
+Most relevant rendering will happen via React, so, serve a React file and we're done. 
+
+I'm unsure about the auth however. It's quite easy to process REST requests by authing via token, but I have to use cookies at some point. 
+
+So yeah;
+
+- From the page-serving server-side context, the state/session of the user can be:
+	| Nothing
+	| Just token
+
+- From the REST-serving context, the state/session of the user can be:
+	| Mu, it's stateless
+
+- From the React client context, the session can either be:
+	| Nothing
+	| Just token
+
+As to what it can serve
+
+- Page-serving server-side:
+	| GET /frontend.js -> the React
+	| GET / -> serves the basic page, which has the auth token or not, imports the react and renders
+	| POST /login?name=blah -> sets the session and redirects to /. Deal with login errors later
+	| POST /logout -> unsets the session and redirects to /. 
+
+- REST server:
+	| get pins
+	| get one pin?
+	| add a pin
+	| edit a pin?
+	| delete a pin?
+	| search pins?
+	
