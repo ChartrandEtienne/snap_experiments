@@ -1,3 +1,0 @@
-[submodule "lib/snaplets"]
-	path = lib/snaplets
-	url = https://github.com/Soostone/snaplet-persistent.git
