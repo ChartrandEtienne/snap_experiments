@@ -7,7 +7,7 @@ var BaseComponent = React.createClass({
 		if ("" === this.props.user) {
 			return (<LoggedOut />);
 		} else {
-			return (<div>{this.props.user}</div>);
+			return (<LoggedIn user={this.props.user} />);
 		}
 	}
 });

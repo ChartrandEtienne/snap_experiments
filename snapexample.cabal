@@ -62,6 +62,7 @@ executable snapexample
                        , snap
                        , snap-core
                        , persistent
+                       , snaplet-persistent
                        , persistent-sqlite
                        , persistent-template
                        , transformers

@@ -34,4 +34,10 @@ As to what it can serve
 	| edit a pin?
 	| delete a pin?
 	| search pins?
+
+- Frontend: 
+	| display them pins
+	| add a pin
+	| display the login form
+	
 	

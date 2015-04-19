@@ -21,7 +21,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import           Data.ByteString (ByteString)
 import qualified Snap as S
--- import qualified Snap.Snaplet.Persistent as SnapletPersistent
+import qualified Snap.Snaplet.Persistent as SnapletPersistent
 import Snap.Util.FileServe (serveDirectory, serveFile)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Maybe (fromMaybe)
@@ -29,6 +29,7 @@ import qualified Data.Text as Text
 
 data App = App 
     { _sess ::  S.Snaplet Sess.SessionManager
+    , _db   ::  S.Snaplet Persistent
     }
 
 Lens.makeLenses ''App
@@ -64,7 +65,7 @@ authHandler = do
     maybe_name <- S.getPostParam "user"
     let name = decodeUtf8 $ fromMaybe "" maybe_name
     S.with sess $ Sess.setInSession "user" name >> Sess.commitSession
-    S.writeBS $ encodeUtf8 $ Text.concat ["you're ", name]
+    S.redirect "/"
 
 auth :: (Text.Text -> MyHandler) -> MyHandler
 auth success = do
@@ -91,6 +92,7 @@ routes =
 
 app :: Snaplet.SnapletInit App App
 app = Snaplet.makeSnaplet "app" "yeah" Nothing $ do
+    d <- S.nestSnaplet "db" db $ Persist.initPersist (Sqlite.runMigration migrateAll)
     s <- Snaplet.nestSnaplet "sess" sess $
         CookieSession.initCookieSessionManager "site_key.txt" "sess" (Just 3600)
     S.addRoutes routes
