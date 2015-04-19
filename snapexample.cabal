@@ -67,6 +67,7 @@ executable snapexample
                        , transformers
                        , lens
                        , bytestring
+                       , text
   
   -- Directories containing source files.
   hs-source-dirs:      src
