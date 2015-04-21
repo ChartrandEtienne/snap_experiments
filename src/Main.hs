@@ -21,15 +21,16 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import           Data.ByteString (ByteString)
 import qualified Snap as S
-import qualified Snap.Snaplet.Persistent as SnapletPersistent
+-- import qualified Snap.Snaplet.Persistent as SnapletPersistent
 import Snap.Util.FileServe (serveDirectory, serveFile)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as Text
+import qualified MyDatabase as MyDatabase
 
 data App = App 
     { _sess ::  S.Snaplet Sess.SessionManager
-    , _db   ::  S.Snaplet Persistent
+    , _db   ::  S.Snaplet MyDatabase.PersistState
     }
 
 Lens.makeLenses ''App
@@ -92,29 +93,20 @@ routes =
 
 app :: Snaplet.SnapletInit App App
 app = Snaplet.makeSnaplet "app" "yeah" Nothing $ do
-    d <- S.nestSnaplet "db" db $ Persist.initPersist (Sqlite.runMigration migrateAll)
     s <- Snaplet.nestSnaplet "sess" sess $
         CookieSession.initCookieSessionManager "site_key.txt" "sess" (Just 3600)
+    d <- Snaplet.nestSnaplet "db" db $ MyDatabase.initPersist 
     S.addRoutes routes
-    return $ App s
+    return $ App s d
 
 main = Snaplet.serveSnaplet S.defaultConfig app
 
-{- 
-main :: IO ()
-main = do
+erm :: IO ()
+erm = do
     Sqlite.runSqlite ":memory:" $ do
         Sqlite.runMigration migrateAll   
-    S.quickHttpServe site
--}
+    S.quickHttpServe undefined
 
-site :: S.Snap ()
-site =
-    S.ifTop (S.writeBS "hello world") S.<|>
-    S.route [ ("foo", S.writeBS "bar")
-          , ("echo/:echoparam", echoHandler)
-          ] S.<|>
-    S.dir "static" (serveDirectory ".")
 
 echoHandler :: S.Snap ()
 echoHandler = do
