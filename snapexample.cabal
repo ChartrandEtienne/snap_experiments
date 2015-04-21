@@ -73,6 +73,7 @@ executable snapexample
                        , resource-pool
                        , mtl
                        , monad-logger
+                       , resourcet
   
   -- Directories containing source files.
   hs-source-dirs:      src

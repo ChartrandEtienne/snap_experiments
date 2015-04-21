@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE EmptyDataDecls             #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GADTs                      #-}
@@ -47,8 +48,14 @@ Link
 
 type MyHandler = S.Handler App App ()
 
+instance MyDatabase.HasPersistPool (S.Handler App App) where
+    getPersistPool = S.with db MyDatabase.getPersistPool
+
 someRoute :: MyHandler
 someRoute = do
+    -- wtf <- MyDatabase.runPersist $ Sqlite.selectList [] [] 
+    -- wtf <- MyDatabase.runPersist undefined :: S.Handler App App [Sqlite.Entity Usr]
+    wtf <- MyDatabase.runPersist $ Sqlite.selectList [] [] :: S.Handler App App [Sqlite.Entity Usr]
     maybe_sess <- S.with sess $ Sess.getFromSession "user"
     let sess = fromMaybe "" maybe_sess
     S.writeBS $ ByteString.concat 
