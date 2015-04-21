@@ -108,11 +108,13 @@ app = Snaplet.makeSnaplet "app" "yeah" Nothing $ do
 
 main = Snaplet.serveSnaplet S.defaultConfig app
 
+{- 
 erm :: IO ()
 erm = do
     Sqlite.runSqlite ":memory:" $ do
         Sqlite.runMigration migrateAll   
     S.quickHttpServe undefined
+-}
 
 
 echoHandler :: S.Snap ()
