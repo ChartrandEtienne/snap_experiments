@@ -62,13 +62,18 @@ executable snapexample
                        , snap
                        , snap-core
                        , persistent
-                       , snaplet-persistent
+                       -- , snaplet-persistent
+                       -- , snaplet-sqlite-simple
                        , persistent-sqlite
                        , persistent-template
                        , transformers
                        , lens
                        , bytestring
                        , text
+                       , resource-pool
+                       , mtl
+                       , monad-logger
+                       , resourcet
   
   -- Directories containing source files.
   hs-source-dirs:      src
