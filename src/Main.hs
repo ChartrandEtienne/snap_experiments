@@ -29,7 +29,7 @@ import qualified Data.Text as Text
 
 data App = App 
     { _sess ::  S.Snaplet Sess.SessionManager
-    , _db   ::  S.Snaplet Persistent
+    -- , _db   ::  S.Snaplet Persistent
     }
 
 Lens.makeLenses ''App
@@ -92,7 +92,7 @@ routes =
 
 app :: Snaplet.SnapletInit App App
 app = Snaplet.makeSnaplet "app" "yeah" Nothing $ do
-    d <- S.nestSnaplet "db" db $ Persist.initPersist (Sqlite.runMigration migrateAll)
+    -- d <- S.nestSnaplet "db" db $ Persist.initPersist (Sqlite.runMigration migrateAll)
     s <- Snaplet.nestSnaplet "sess" sess $
         CookieSession.initCookieSessionManager "site_key.txt" "sess" (Just 3600)
     S.addRoutes routes
@@ -100,24 +100,3 @@ app = Snaplet.makeSnaplet "app" "yeah" Nothing $ do
 
 main = Snaplet.serveSnaplet S.defaultConfig app
 
-{- 
-main :: IO ()
-main = do
-    Sqlite.runSqlite ":memory:" $ do
-        Sqlite.runMigration migrateAll   
-    S.quickHttpServe site
--}
-
-site :: S.Snap ()
-site =
-    S.ifTop (S.writeBS "hello world") S.<|>
-    S.route [ ("foo", S.writeBS "bar")
-          , ("echo/:echoparam", echoHandler)
-          ] S.<|>
-    S.dir "static" (serveDirectory ".")
-
-echoHandler :: S.Snap ()
-echoHandler = do
-    param <- S.getParam "echoparam"
-    maybe (S.writeBS "must specify echo/param in URL")
-          S.writeBS param
