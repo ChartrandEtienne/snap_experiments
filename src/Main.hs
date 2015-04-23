@@ -11,6 +11,8 @@
 {-# LANGUAGE TypeFamilies               #-}
 
 import Control.Monad.IO.Class  (liftIO)
+import Control.Applicative
+import Control.Monad
 import qualified Database.Persist as Persist
 import qualified Database.Persist.Sqlite as Sqlite
 import qualified Database.Persist.TH as TH
@@ -28,6 +30,8 @@ import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as Text
 import qualified MyDatabase as MyDatabase
+
+import qualified Data.Aeson as Aeson
 
 import qualified Control.Monad.State as MonadState
 import qualified Control.Monad.Trans.Reader as MonadReader
@@ -51,6 +55,21 @@ Link
     deriving Show
 |]
 
+data LinkInput = LinkInput { url :: String }
+
+instance Aeson.FromJSON LinkInput where
+    parseJSON (Aeson.Object v)  = 
+        LinkInput <$> v Aeson..: "url" 
+    parseJSON _ = mzero
+
+{-
+instance FromJSON Coord where
+    parseJSON (Object v) = Person <$>
+                           v .: "name" <*>
+                           v .: "age"
+    parseJSON _          = mzero
+-}
+
 type MyHandler a = S.Handler App App a
 
 instance MyDatabase.HasPersistPool (S.Handler App App) where
@@ -73,11 +92,11 @@ someRoute = do
         , "<script src='/frontend.js'></script>"
         ]
 
-maybe_user :: Text.Text -> MyHandler (Maybe Usr)
+maybe_user :: Text.Text -> MyHandler (Maybe (Sqlite.Entity Usr))
 maybe_user name = do
     onePossibleUser <- MyDatabase.runPersist $ Persist.selectList [UsrLogin Persist.==. (Text.unpack name)] [Persist.LimitTo 1] 
     case onePossibleUser of
-                [Sqlite.Entity uh ah]   -> return $ Just ah
+                [Sqlite.Entity uh ah]   -> return $ Just $ Sqlite.Entity uh ah
                 _   -> return Nothing
 
 authHandler :: MyHandler ()
@@ -91,20 +110,20 @@ authHandler = do
     S.redirect "/"
     
 
-auth :: (Text.Text -> MyHandler () ) -> MyHandler ()
+auth :: (Sqlite.Entity Usr -> MyHandler ()) -> MyHandler ()
 auth success = do
     maybe_sess <- S.with sess $ Sess.getFromSession "user"
     case maybe_sess of 
         Just sess -> do
             maybe_usr <- maybe_user sess
             case maybe_usr of
-                Just usr -> success $ Text.pack $ usrLogin usr
+                Just usr -> success $ usr
                 _ -> S.writeBS "nope here"
         _ -> S.writeBS "nope there"
 
     S.writeBS "nope"
 
-pinsHandler :: Text.Text -> MyHandler () 
+pinsHandler :: Sqlite.Entity Usr -> MyHandler () 
 pinsHandler user = do
     results <- MyDatabase.runPersist $ Persist.selectList [] [] :: MyHandler [Sqlite.Entity Usr]
     
