@@ -73,24 +73,41 @@ someRoute = do
         , "<script src='/frontend.js'></script>"
         ]
 
+maybe_user :: Text.Text -> MyHandler (Maybe Usr)
+maybe_user name = do
+    onePossibleUser <- MyDatabase.runPersist $ Persist.selectList [UsrLogin Persist.==. (Text.unpack name)] [Persist.LimitTo 1] 
+    case onePossibleUser of
+                [Sqlite.Entity uh ah]   -> return $ Just ah
+                _   -> return Nothing
+
 authHandler :: MyHandler ()
 authHandler = do
     maybe_name <- S.getPostParam "user"
     let name = decodeUtf8 $ fromMaybe "" maybe_name
-    S.with sess $ Sess.setInSession "user" name >> Sess.commitSession
+    onePossibleUser <- MyDatabase.runPersist $ Persist.selectList [UsrLogin Persist.==. (Text.unpack name)] [Persist.LimitTo 1] 
+    case onePossibleUser of
+        [Sqlite.Entity uh ah] -> S.with sess $ Sess.setInSession "user" name >> Sess.commitSession
+        _ -> return ()
     S.redirect "/"
+    
 
 auth :: (Text.Text -> MyHandler () ) -> MyHandler ()
 auth success = do
-     
     maybe_sess <- S.with sess $ Sess.getFromSession "user"
     case maybe_sess of 
-        Just user -> success user
-        Nothing -> S.writeBS "nope"
+        Just sess -> do
+            maybe_usr <- maybe_user sess
+            case maybe_usr of
+                Just usr -> success $ Text.pack $ usrLogin usr
+                _ -> S.writeBS "nope here"
+        _ -> S.writeBS "nope there"
+
+    S.writeBS "nope"
 
 pinsHandler :: Text.Text -> MyHandler () 
 pinsHandler user = do
     results <- MyDatabase.runPersist $ Persist.selectList [] [] :: MyHandler [Sqlite.Entity Usr]
+    
     let len = length results
     let conv = encodeUtf8 $ Text.pack $ show len
     S.writeBS $ ByteString.concat ["so yeah; ", conv]
