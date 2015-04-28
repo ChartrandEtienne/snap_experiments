@@ -55,11 +55,13 @@ Link
     deriving Show
 |]
 
-data LinkInput = LinkInput { url :: String }
+data LinkInput = LinkInput { url :: String , title :: String }
+data LinkFaround = LinkFaround { furl :: Maybe ByteString }
 
 instance Aeson.FromJSON LinkInput where
     parseJSON (Aeson.Object v)  = 
-        LinkInput <$> v Aeson..: "url" 
+        LinkInput   <$> v Aeson..: "url" 
+                    <*> v Aeson..: "title"
     parseJSON _ = mzero
 
 {-
@@ -123,6 +125,12 @@ auth success = do
 
     S.writeBS "nope"
 
+addPinHandler :: MyHandler ()
+addPinHandler = do
+    erm <- fmap LinkFaround (S.getParam "perhaps")
+    lul <- S.getParam "perhaps"
+    S.writeBS "yeah"
+
 pinsHandler :: Sqlite.Entity Usr -> MyHandler () 
 pinsHandler user = do
     results <- MyDatabase.runPersist $ Persist.selectList [] [] :: MyHandler [Sqlite.Entity Usr]
@@ -136,6 +144,7 @@ routes =
     [ ("/", someRoute)
     , ("/login", authHandler)
     , ("/pins", auth pinsHandler)
+    , ("/posts/add", addPinHandler) 
     , ("/frontend.js", serveFile "./frontend/dist/app.js")
     ]
 
