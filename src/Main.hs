@@ -21,8 +21,8 @@ import qualified Control.Lens as Lens
 import qualified Snap.Snaplet as Snaplet
 import qualified Snap.Snaplet.Session.Backends.CookieSession as CookieSession
 import Data.ByteString (ByteString)
+import Data.ByteString.Lazy (toStrict)
 import qualified Data.ByteString as ByteString
-import           Data.ByteString (ByteString)
 import qualified Snap as S
 -- import qualified Snap.Snaplet.Persistent as SnapletPersistent
 import Snap.Util.FileServe (serveDirectory, serveFile)
@@ -37,6 +37,12 @@ import qualified Control.Monad.State as MonadState
 import qualified Control.Monad.Trans.Reader as MonadReader
 import qualified Control.Monad.Logger as MonadLogger
 import qualified Control.Monad.Trans.Resource as MonadResource
+
+import qualified MyDigestive as MyDG
+
+import qualified Text.Digestive as DG
+-- import qualified Text.Digestive.Heist as HDigestive
+-- import qualified Text.Digestive.Snap as SDigestive
 
 data App = App 
     { _sess ::  S.Snaplet Sess.SessionManager
@@ -55,14 +61,22 @@ Link
     deriving Show
 |]
 
-data LinkInput = LinkInput { url :: String , title :: String }
+data LinkInput = LinkInput { url :: Text.Text , title :: Text.Text } deriving (Show)
 data LinkFaround = LinkFaround { furl :: Maybe ByteString }
+
+linkForm :: Monad m => DG.Form Text.Text m LinkInput
+linkForm = LinkInput
+    <$> "url" DG..: DG.text Nothing
+    <*> "title" DG..: DG.text Nothing
 
 instance Aeson.FromJSON LinkInput where
     parseJSON (Aeson.Object v)  = 
         LinkInput   <$> v Aeson..: "url" 
                     <*> v Aeson..: "title"
     parseJSON _ = mzero
+
+instance Aeson.ToJSON LinkInput where
+    toJSON (LinkInput url title) = Aeson.object ["url" Aeson..= url, "title" Aeson..= title]
 
 {-
 instance FromJSON Coord where
@@ -125,8 +139,32 @@ auth success = do
 
     S.writeBS "nope"
 
+-- curl -X POST --data {"url": "hurl", "title": "works tho"} 127.0.0.1:8000/posts/add
+
 addPinHandler :: MyHandler ()
 addPinHandler = do
+    body <- S.getRequestBody
+    let erm = Aeson.decode body :: Maybe LinkInput
+    let mhh = show erm
+    S.writeText $ Text.pack mhh
+    S.writeBS "urgh"
+
+
+doesntReturnSquat :: MyHandler ()
+doesntReturnSquat = do
+    S.writeBS "bullshit yeah "
+    (view, result) <- MyDG.runForm "" linkForm
+    let jsonned = case result of
+            Just x  ->  Aeson.encode x
+            Nothing -> "nada"
+        
+    let jesus = toStrict jsonned
+    -- S.writeBS $ ByteString.toStrict jsonned
+    S.writeBS jesus
+    S.writeBS " okay"
+
+lookMaFunctors :: MyHandler ()
+lookMaFunctors = do
     erm <- fmap LinkFaround (S.getParam "perhaps")
     lul <- S.getParam "perhaps"
     S.writeBS "yeah"
