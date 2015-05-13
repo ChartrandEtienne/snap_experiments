@@ -75,6 +75,7 @@ executable snapexample
                        , monad-logger
                        , resourcet
                        , aeson
+                       , digestive-functors
   
   -- Directories containing source files.
   hs-source-dirs:      src

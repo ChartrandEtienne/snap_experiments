@@ -11,7 +11,9 @@
 {-# LANGUAGE TypeFamilies               #-}
 
 import Control.Monad.IO.Class  (liftIO)
-import Control.Applicative
+import qualified Control.Applicative as CApp
+
+-- import Control.Applicative ((<$>), (<*>))
 import Control.Monad
 import qualified Database.Persist as Persist
 import qualified Database.Persist.Sqlite as Sqlite
@@ -38,6 +40,11 @@ import qualified Control.Monad.Trans.Reader as MonadReader
 import qualified Control.Monad.Logger as MonadLogger
 import qualified Control.Monad.Trans.Resource as MonadResource
 
+import qualified Text.Digestive as TDig
+-- import Text.Digestive.Blaze.Html5
+-- import Text.Digestive.Happstack
+-- import Text.Digestive.Util
+
 data App = App 
     { _sess ::  S.Snaplet Sess.SessionManager
     , _db   ::  S.Snaplet MyDatabase.PersistState
@@ -59,8 +66,16 @@ data LinkInput = LinkInput { url :: String }
 
 instance Aeson.FromJSON LinkInput where
     parseJSON (Aeson.Object v)  = 
-        LinkInput <$> v Aeson..: "url" 
+        LinkInput CApp.<$> v Aeson..: "url" 
     parseJSON _ = mzero
+
+-- userForm = User
+--     <$> "name" .: text Nothing
+--     <*> "mail" .: check "Not a valid email address" checkEmail (text Nothing)
+
+linkForm :: Monad m => TDig.Form Text.Text m LinkInput
+linkForm = LinkInput
+    CApp.<$> "url" TDig..: TDig.string Nothing
 
 {-
 instance FromJSON Coord where
@@ -124,7 +139,7 @@ auth success = do
     S.writeBS "nope"
 
 pinsHandler :: Sqlite.Entity Usr -> MyHandler () 
-pinsHandler user = do
+pinsHandler user = S.method S.GET $ do
     results <- MyDatabase.runPersist $ Persist.selectList [] [] :: MyHandler [Sqlite.Entity Usr]
     
     let len = length results
@@ -132,9 +147,14 @@ pinsHandler user = do
     S.writeBS $ ByteString.concat ["so yeah; ", conv]
     -- S.writeBS "yeah"
 
+addPinHandler :: Sqlite.Entity Usr -> MyHandler ()
+addPinHandler user = S.method S.POST $ do
+    S.writeBS "okay"
+
 routes = 
     [ ("/", someRoute)
     , ("/login", authHandler)
+    , ("/pins/add", auth addPinHandler)
     , ("/pins", auth pinsHandler)
     , ("/frontend.js", serveFile "./frontend/dist/app.js")
     ]
