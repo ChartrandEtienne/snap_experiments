@@ -52,11 +52,6 @@ data App = App
 
 Lens.makeLenses ''App
 
--- instance PSql.HasPostgres (S.Handler b App) where
-instance PSql.HasPostgres (S.Handler b App) where
-    getPostgresState = S.with db MonadState.get 
-    -- setLocalPostgresState s = MonadReader.local (Lens.set (db . S.snapletValue) s)
-
 TH.share [TH.mkPersist TH.sqlSettings, TH.mkMigrate "migrateAll"] [TH.persistLowerCase|
 Usr
     login String
@@ -102,13 +97,18 @@ someRoute = do
         , "<script src='/frontend.js'></script>"
         ]
 
-maybe_user :: Text.Text -> MyHandler (Maybe (Sqlite.Entity Usr))
+-- maybe_user :: Text.Text -> MyHandler (Maybe (Sqlite.Entity Usr))
 maybe_user name = do
     -- onePossibleUser <- MyDatabase.runPersist $ Persist.selectList [UsrLogin Persist.==. (Text.unpack name)] [Persist.LimitTo 1] 
-    let onePossibleUser = undefined 
-    case onePossibleUser of
-                [Sqlite.Entity uh ah]   -> return $ Just $ Sqlite.Entity uh ah
-                _   -> return Nothing
+    -- let onePossibleUser = undefined 
+    -- case onePossibleUser of
+    --             [Sqlite.Entity uh ah]   -> return $ Just $ Sqlite.Entity uh ah
+    --             _   -> return Nothing
+
+    onePossibleUser <- S.with db $ PSql.query_ "select * from login" :: MyHandler [(Int, Text.Text)]
+    case onePossibleUser of 
+        [(id, login)] -> return $ Just (id, login)
+        _ -> return Nothing
 
 authHandler :: MyHandler ()
 authHandler = do
@@ -126,7 +126,7 @@ authHandler = do
     S.redirect "/"
     
 
-auth :: (Sqlite.Entity Usr -> MyHandler ()) -> MyHandler ()
+auth :: ((Int, Text.Text) -> MyHandler ()) -> MyHandler ()
 auth success = do
     maybe_sess <- S.with sess $ Sess.getFromSession "user"
     case maybe_sess of 
@@ -139,12 +139,12 @@ auth success = do
 
     S.writeBS "nope"
 
-pinsHandler :: Sqlite.Entity Usr -> MyHandler () 
+pinsHandler :: (Int, Text.Text) -> MyHandler () 
 pinsHandler user = S.method S.GET $ do
     S.writeBS $ ByteString.concat ["so yeah; ", "fuck persistent"]
     -- S.writeBS "yeah"
 
-addPinHandler :: Sqlite.Entity Usr -> MyHandler ()
+addPinHandler :: (Int, Text.Text) -> MyHandler ()
 addPinHandler user = S.method S.POST $ do
     S.writeBS "okay"
 
