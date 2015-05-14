@@ -11,7 +11,9 @@
 {-# LANGUAGE TypeFamilies               #-}
 
 import Control.Monad.IO.Class  (liftIO)
-import Control.Applicative
+import qualified Control.Applicative as CApp
+
+-- import Control.Applicative ((<$>), (<*>))
 import Control.Monad
 import qualified Database.Persist as Persist
 import qualified Database.Persist.Sqlite as Sqlite
@@ -21,6 +23,7 @@ import qualified Control.Lens as Lens
 import qualified Snap.Snaplet as Snaplet
 import qualified Snap.Snaplet.Session.Backends.CookieSession as CookieSession
 import Data.ByteString (ByteString)
+import Data.ByteString.Char8 (pack)
 import Data.ByteString.Lazy (toStrict)
 import qualified Data.ByteString as ByteString
 import qualified Snap as S
@@ -32,70 +35,43 @@ import qualified Data.Text as Text
 import qualified MyDatabase as MyDatabase
 
 import qualified Data.Aeson as Aeson
+import Data.Aeson ((.=))
 
 import qualified Control.Monad.State as MonadState
 import qualified Control.Monad.Trans.Reader as MonadReader
 import qualified Control.Monad.Logger as MonadLogger
 import qualified Control.Monad.Trans.Resource as MonadResource
-
-import qualified MyDigestive as MyDG
-
-import qualified Text.Digestive as DG
--- import qualified Text.Digestive.Heist as HDigestive
--- import qualified Text.Digestive.Snap as SDigestive
+import qualified Snap.Snaplet.PostgresqlSimple as PSql
 
 data App = App 
     { _sess ::  S.Snaplet Sess.SessionManager
-    , _db   ::  S.Snaplet MyDatabase.PersistState
+    , _db   ::  S.Snaplet PSql.Postgres
     }
 
 Lens.makeLenses ''App
 
-TH.share [TH.mkPersist TH.sqlSettings, TH.mkMigrate "migrateAll"] [TH.persistLowerCase|
-Usr
-    login String
-    deriving Show
-Link
-    url String
-    authorId UsrId
-    deriving Show
-|]
+data LinkInput = LinkInput { url :: String }
 
-data LinkInput = LinkInput { url :: Text.Text , title :: Text.Text } deriving (Show)
-data LinkFaround = LinkFaround { furl :: Maybe ByteString }
+data Usr = Usr { usr_id :: Int, usr_login :: String } deriving (Show)
 
-linkForm :: Monad m => DG.Form Text.Text m LinkInput
-linkForm = LinkInput
-    <$> "url" DG..: DG.text Nothing
-    <*> "title" DG..: DG.text Nothing
+data Post = Post { post_id :: Int, post_url :: Text.Text, post_title :: Text.Text, post_usr_fk :: Int } deriving (Show)
 
-instance Aeson.FromJSON LinkInput where
-    parseJSON (Aeson.Object v)  = 
-        LinkInput   <$> v Aeson..: "url" 
-                    <*> v Aeson..: "title"
-    parseJSON _ = mzero
+instance Aeson.ToJSON Post where
+    toJSON (Post post_id post_url post_title post_usr_fk) = Aeson.object ["url" .= post_url, "title" .= post_title]
 
-instance Aeson.ToJSON LinkInput where
-    toJSON (LinkInput url title) = Aeson.object ["url" Aeson..= url, "title" Aeson..= title]
+instance PSql.FromRow Usr where
+    fromRow = Usr CApp.<$> PSql.field CApp.<*> PSql.field
 
-{-
-instance FromJSON Coord where
-    parseJSON (Object v) = Person <$>
-                           v .: "name" <*>
-                           v .: "age"
-    parseJSON _          = mzero
--}
+instance PSql.FromRow Post where
+    fromRow = Post CApp.<$> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field
 
 type MyHandler a = S.Handler App App a
 
-instance MyDatabase.HasPersistPool (S.Handler App App) where
-    getPersistPool = S.with db MyDatabase.getPersistPool
-
 someRoute :: MyHandler ()
 someRoute = do
-    -- wtf <- MyDatabase.runPersist $ Sqlite.selectList [] [] 
-    -- wtf <- MyDatabase.runPersist undefined :: S.Handler App App [Sqlite.Entity Usr]
-    wtf <- MyDatabase.runPersist $ Sqlite.selectList [] [] :: S.Handler App App [Sqlite.Entity Usr]
+    posts <- S.with db $ PSql.query_ "select 2 + 2" 
+    let urgh = posts :: [PSql.Only Int]
+    let wtf = pack $ foldl (\accu (PSql.Only foo) -> accu ++ ", " ++ (show foo)) "" urgh :: ByteString
     maybe_sess <- S.with sess $ Sess.getFromSession "user"
     let sess = fromMaybe "" maybe_sess
     S.writeBS $ ByteString.concat 
@@ -104,29 +80,36 @@ someRoute = do
         , "</head>"
         , "<html>"
         , "<div id='react_hook'></div>"
+        , "<p>", wtf, "</p>"
         , "</html>"  
         , "<script src='/frontend.js'></script>"
         ]
 
-maybe_user :: Text.Text -> MyHandler (Maybe (Sqlite.Entity Usr))
+-- maybe_user :: Text.Text -> MyHandler (Maybe (Sqlite.Entity Usr))
 maybe_user name = do
-    onePossibleUser <- MyDatabase.runPersist $ Persist.selectList [UsrLogin Persist.==. (Text.unpack name)] [Persist.LimitTo 1] 
-    case onePossibleUser of
-                [Sqlite.Entity uh ah]   -> return $ Just $ Sqlite.Entity uh ah
-                _   -> return Nothing
+    -- onePossibleUser <- MyDatabase.runPersist $ Persist.selectList [UsrLogin Persist.==. (Text.unpack name)] [Persist.LimitTo 1] 
+    -- let onePossibleUser = undefined 
+    -- case onePossibleUser of
+    --             [Sqlite.Entity uh ah]   -> return $ Just $ Sqlite.Entity uh ah
+    --             _   -> return Nothing
+
+    onePossibleUser <- S.with db $ PSql.query_ "select * from usr" :: MyHandler [Usr]
+    case onePossibleUser of 
+        [Usr id login] -> return $ Just $ Usr id login
+        _ -> return Nothing
 
 authHandler :: MyHandler ()
 authHandler = do
     maybe_name <- S.getPostParam "user"
     let name = decodeUtf8 $ fromMaybe "" maybe_name
-    onePossibleUser <- MyDatabase.runPersist $ Persist.selectList [UsrLogin Persist.==. (Text.unpack name)] [Persist.LimitTo 1] 
-    case onePossibleUser of
-        [Sqlite.Entity uh ah] -> S.with sess $ Sess.setInSession "user" name >> Sess.commitSession
+    onePossibleUser <- S.with db $ PSql.query_ "select * from usr" :: MyHandler [(Int, Text.Text)]
+    case onePossibleUser of 
+        [(id, login)] -> S.with sess $ Sess.setInSession "user" login >> Sess.commitSession
         _ -> return ()
     S.redirect "/"
     
 
-auth :: (Sqlite.Entity Usr -> MyHandler ()) -> MyHandler ()
+auth :: (Usr -> MyHandler ()) -> MyHandler ()
 auth success = do
     maybe_sess <- S.with sess $ Sess.getFromSession "user"
     case maybe_sess of 
@@ -137,52 +120,23 @@ auth success = do
                 _ -> S.writeBS "nope here"
         _ -> S.writeBS "nope there"
 
-    S.writeBS "nope"
 
--- curl -X POST --data {"url": "hurl", "title": "works tho"} 127.0.0.1:8000/posts/add
+pinsHandler :: Usr -> MyHandler () 
+pinsHandler user = S.method S.GET $ do
+    posts <- S.with db $ PSql.query "select * from post where usr_id = ?" (PSql.Only $ usr_id user) :: MyHandler [Post]
+    let to_string = toStrict $ Aeson.encode posts
+    S.writeBS $ ByteString.concat ["so yeah; ", "fuck persistent: ", to_string]
 
-addPinHandler :: MyHandler ()
-addPinHandler = do
-    body <- S.getRequestBody
-    let erm = Aeson.decode body :: Maybe LinkInput
-    let mhh = show erm
-    S.writeText $ Text.pack mhh
-    S.writeBS "urgh"
-
-
-doesntReturnSquat :: MyHandler ()
-doesntReturnSquat = do
-    S.writeBS "bullshit yeah "
-    (view, result) <- MyDG.runForm "" linkForm
-    let jsonned = case result of
-            Just x  ->  Aeson.encode x
-            Nothing -> "nada"
-        
-    let jesus = toStrict jsonned
-    -- S.writeBS $ ByteString.toStrict jsonned
-    S.writeBS jesus
-    S.writeBS " okay"
-
-lookMaFunctors :: MyHandler ()
-lookMaFunctors = do
-    erm <- fmap LinkFaround (S.getParam "perhaps")
-    lul <- S.getParam "perhaps"
-    S.writeBS "yeah"
-
-pinsHandler :: Sqlite.Entity Usr -> MyHandler () 
-pinsHandler user = do
-    results <- MyDatabase.runPersist $ Persist.selectList [] [] :: MyHandler [Sqlite.Entity Usr]
-    
-    let len = length results
-    let conv = encodeUtf8 $ Text.pack $ show len
-    S.writeBS $ ByteString.concat ["so yeah; ", conv]
-    -- S.writeBS "yeah"
+addPinHandler :: Usr -> MyHandler ()
+addPinHandler user = S.method S.POST $ do
+    S.writeBS "okay"
 
 routes = 
     [ ("/", someRoute)
     , ("/login", authHandler)
+    , ("/pins/add", auth addPinHandler)
     , ("/pins", auth pinsHandler)
-    , ("/posts/add", addPinHandler) 
+    , ("/posts/add", auth addPinHandler) 
     , ("/frontend.js", serveFile "./frontend/dist/app.js")
     ]
 
@@ -190,8 +144,8 @@ app :: Snaplet.SnapletInit App App
 app = Snaplet.makeSnaplet "app" "yeah" Nothing $ do
     s <- Snaplet.nestSnaplet "sess" sess $
         CookieSession.initCookieSessionManager "site_key.txt" "sess" (Just 3600)
-    d <- Snaplet.nestSnaplet "db" db $ MyDatabase.initPersist (Sqlite.runMigration migrateAll)
     S.addRoutes routes
+    d <- S.nestSnaplet "db" db PSql.pgsInit
     return $ App s d
 
 main = Snaplet.serveSnaplet S.defaultConfig app

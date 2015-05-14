@@ -75,10 +75,7 @@ executable snapexample
                        , monad-logger
                        , resourcet
                        , aeson
-                       , directory
-                       , filepath
-                       , containers
-                       , digestive-functors
+                       , snaplet-postgresql-simple
   
   -- Directories containing source files.
   hs-source-dirs:      src
