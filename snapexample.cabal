@@ -76,6 +76,7 @@ executable snapexample
                        , resourcet
                        , aeson
                        , snaplet-postgresql-simple
+                       , postgresql-simple
   
   -- Directories containing source files.
   hs-source-dirs:      src

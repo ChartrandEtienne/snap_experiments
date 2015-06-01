@@ -15,15 +15,13 @@ import qualified Control.Applicative as CApp
 
 -- import Control.Applicative ((<$>), (<*>))
 import Control.Monad
-import qualified Database.Persist as Persist
-import qualified Database.Persist.Sqlite as Sqlite
-import qualified Database.Persist.TH as TH
 import qualified Snap.Snaplet.Session as Sess
 import qualified Control.Lens as Lens
 import qualified Snap.Snaplet as Snaplet
 import qualified Snap.Snaplet.Session.Backends.CookieSession as CookieSession
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 (pack)
+import Data.ByteString.Lazy (toStrict)
 import qualified Data.ByteString as ByteString
 import           Data.ByteString (ByteString)
 import qualified Snap as S
@@ -35,15 +33,15 @@ import qualified Data.Text as Text
 import qualified MyDatabase as MyDatabase
 
 import qualified Data.Aeson as Aeson
+import Data.Aeson ((.=))
 
 import qualified Control.Monad.State as MonadState
 import qualified Control.Monad.Trans.Reader as MonadReader
 import qualified Control.Monad.Logger as MonadLogger
 import qualified Control.Monad.Trans.Resource as MonadResource
 import qualified Snap.Snaplet.PostgresqlSimple as PSql
--- import Text.Digestive.Blaze.Html5
--- import Text.Digestive.Happstack
--- import Text.Digestive.Util
+import Database.PostgreSQL.Simple.Types 
+import Database.PostgreSQL.Simple.ToField
 
 data App = App 
     { _sess ::  S.Snaplet Sess.SessionManager
@@ -52,21 +50,28 @@ data App = App
 
 Lens.makeLenses ''App
 
-TH.share [TH.mkPersist TH.sqlSettings, TH.mkMigrate "migrateAll"] [TH.persistLowerCase|
-Usr
-    login String
-    deriving Show
-Link
-    url String
-    authorId UsrId
-    deriving Show
-|]
+data LinkInput = LinkInput { url :: Text.Text, title :: Text.Text } deriving (Show)
 
-data LinkInput = LinkInput { url :: String } deriving (Show)
+data Usr = Usr { usr_id :: Int, usr_login :: String } deriving (Show)
+
+data Post = Post { post_url :: Text.Text, post_title :: Text.Text, post_usr_fk :: Int } deriving (Show)
+
+instance Aeson.ToJSON Post where
+    toJSON (Post post_url post_title post_usr_fk) = Aeson.object ["url" .= post_url, "title" .= post_title]
+
+instance PSql.FromRow Usr where
+    fromRow = Usr CApp.<$> PSql.field CApp.<*> PSql.field
+
+instance PSql.FromRow Post where
+    fromRow = Post CApp.<$> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field 
+
+instance PSql.ToRow Post where
+    toRow p = [toField $ post_url p, toField $ post_title p, toField $ post_usr_fk p]
 
 instance Aeson.FromJSON LinkInput where
     parseJSON (Aeson.Object v)  = 
-        LinkInput CApp.<$> v Aeson..: "url" 
+        LinkInput   CApp.<$> v Aeson..: "url" 
+                    CApp.<*> v Aeson..: "title"
     parseJSON _ = mzero
 
 -- userForm = User
@@ -94,36 +99,25 @@ someRoute = do
         , "<script src='/frontend.js'></script>"
         ]
 
--- maybe_user :: Text.Text -> MyHandler (Maybe (Sqlite.Entity Usr))
+maybe_user :: Text.Text -> MyHandler (Maybe Usr)
 maybe_user name = do
-    -- onePossibleUser <- MyDatabase.runPersist $ Persist.selectList [UsrLogin Persist.==. (Text.unpack name)] [Persist.LimitTo 1] 
-    -- let onePossibleUser = undefined 
-    -- case onePossibleUser of
-    --             [Sqlite.Entity uh ah]   -> return $ Just $ Sqlite.Entity uh ah
-    --             _   -> return Nothing
-
-    onePossibleUser <- S.with db $ PSql.query_ "select * from login" :: MyHandler [(Int, Text.Text)]
+    onePossibleUser <- S.with db $ PSql.query "select * from login where login = ?" (PSql.Only name) :: MyHandler [Usr]
     case onePossibleUser of 
-        [(id, login)] -> return $ Just (id, login)
+        [Usr id login] -> return $ Just $ Usr id login
         _ -> return Nothing
 
 authHandler :: MyHandler ()
 authHandler = do
     maybe_name <- S.getPostParam "user"
     let name = decodeUtf8 $ fromMaybe "" maybe_name
-    onePossibleUser <- S.with db $ PSql.query "select * from login where login = ?" (PSql.Only name :: PSql.Only Text.Text) :: MyHandler [(Int, Text.Text)]
+    onePossibleUser <- S.with db $ PSql.query "select * from login where login = ?" (PSql.Only name :: PSql.Only Text.Text) :: MyHandler [Usr]
     case onePossibleUser of 
-        [(id, login)] -> S.with sess $ Sess.setInSession "user" login >> Sess.commitSession
+        [Usr id login] -> S.with sess $ Sess.setInSession "user" (Text.pack login) >> Sess.commitSession
         _ -> return ()
-    -- S.writeBS $ pack $ show onePossibleUser
-    -- onePossibleUser <- MyDatabase.runPersist $ Persist.selectList [UsrLogin Persist.==. (Text.unpack name)] [Persist.LimitTo 1] 
-    -- case onePossibleUser of
-    --     [Sqlite.Entity uh ah] -> S.with sess $ Sess.setInSession "user" name >> Sess.commitSession
-    --     _ -> return ()
     S.redirect "/"
     
 
-auth :: ((Int, Text.Text) -> MyHandler ()) -> MyHandler ()
+auth :: (Usr -> MyHandler ()) -> MyHandler ()
 auth success = do
     maybe_sess <- S.with sess $ Sess.getFromSession "user"
     case maybe_sess of 
@@ -134,16 +128,29 @@ auth success = do
                 _ -> S.writeBS "nope here"
         _ -> S.writeBS "nope there"
 
-    S.writeBS "nope"
 
-pinsHandler :: (Int, Text.Text) -> MyHandler () 
+pinsHandler :: Usr -> MyHandler () 
 pinsHandler user = S.method S.GET $ do
-    S.writeBS $ ByteString.concat ["so yeah; ", "fuck persistent"]
+    posts <- S.with db $ PSql.query "select * from post where usr_id = ?" (PSql.Only $ usr_id user) :: MyHandler [Post]
+    let to_string = toStrict $ Aeson.encode posts
+    S.writeBS $ ByteString.concat ["so yeah; ", "fuck persistent: ", to_string]
     -- S.writeBS "yeah"
 
-addPinHandler :: (Int, Text.Text) -> MyHandler ()
+addPinHandler :: Usr -> MyHandler ()
 addPinHandler user = S.method S.POST $ do
-    S.writeBS "okay"
+    uh <- Aeson.decode `fmap` S.readRequestBody 100000 :: MyHandler (Maybe LinkInput)
+    S.modifyResponse $ S.setHeader "Content-Type" "application/json"
+    case uh of 
+        Just (LinkInput url title) -> do
+            let post = Post url title (usr_id user)
+            S.with db $ PSql.execute "insert into post (url, title, usr_id) values (?, ?, ?)" post
+            -- S.writeBS "uh"
+            return ()
+        Nothing ->
+            -- S.writeBS "erm"
+            return ()
+            
+    S.writeBS $ ByteString.concat ["okay", pack $ show uh]
 
 routes = 
     [ ("/", someRoute)
