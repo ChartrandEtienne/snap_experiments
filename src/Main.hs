@@ -62,7 +62,7 @@ Link
     deriving Show
 |]
 
-data LinkInput = LinkInput { url :: String }
+data LinkInput = LinkInput { url :: String } deriving (Show)
 
 instance Aeson.FromJSON LinkInput where
     parseJSON (Aeson.Object v)  = 
@@ -77,9 +77,6 @@ type MyHandler a = S.Handler App App a
 
 someRoute :: MyHandler ()
 someRoute = do
-    -- wtf <- MyDatabase.runPersist $ Sqlite.selectList [] [] 
-    -- wtf <- MyDatabase.runPersist undefined :: S.Handler App App [Sqlite.Entity Usr]
-    -- wtf <- MyDatabase.runPersist $ Sqlite.selectList [] [] :: S.Handler App App [Sqlite.Entity Usr]
     posts <- S.with db $ PSql.query_ "select 2 + 2" 
     let urgh = posts :: [PSql.Only Int]
     -- let wtf = fmap (\(PSql.Only foo) -> show foo) urgh
@@ -114,7 +111,7 @@ authHandler :: MyHandler ()
 authHandler = do
     maybe_name <- S.getPostParam "user"
     let name = decodeUtf8 $ fromMaybe "" maybe_name
-    onePossibleUser <- S.with db $ PSql.query_ "select * from login" :: MyHandler [(Int, Text.Text)]
+    onePossibleUser <- S.with db $ PSql.query "select * from login where login = ?" (PSql.Only name :: PSql.Only Text.Text) :: MyHandler [(Int, Text.Text)]
     case onePossibleUser of 
         [(id, login)] -> S.with sess $ Sess.setInSession "user" login >> Sess.commitSession
         _ -> return ()
@@ -165,4 +162,11 @@ app = Snaplet.makeSnaplet "app" "yeah" Nothing $ do
     return $ App s d
 
 main = Snaplet.serveSnaplet S.defaultConfig app
+
+{- 
+main = do
+    let uh = Aeson.decode "{\"url\": \"yo\"}" :: Maybe LinkInput
+    putStrLn $ show uh
+    return ()
+-}
 
