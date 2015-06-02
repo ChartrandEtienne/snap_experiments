@@ -54,16 +54,16 @@ data LinkInput = LinkInput { url :: Text.Text, title :: Text.Text } deriving (Sh
 
 data Usr = Usr { usr_id :: Int, usr_login :: String } deriving (Show)
 
-data Post = Post { post_url :: Text.Text, post_title :: Text.Text, post_usr_fk :: Int } deriving (Show)
+data Post = Post { post_id :: Maybe Int, post_url :: Text.Text, post_title :: Text.Text, post_usr_fk :: Int } deriving (Show)
 
 instance Aeson.ToJSON Post where
-    toJSON (Post post_url post_title post_usr_fk) = Aeson.object ["url" .= post_url, "title" .= post_title]
+    toJSON (Post post_id post_url post_title post_usr_fk) = Aeson.object ["url" .= post_url, "title" .= post_title]
 
 instance PSql.FromRow Usr where
     fromRow = Usr CApp.<$> PSql.field CApp.<*> PSql.field
 
 instance PSql.FromRow Post where
-    fromRow = Post CApp.<$> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field 
+    fromRow = Post CApp.<$> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field 
 
 instance PSql.ToRow Post where
     toRow p = [toField $ post_url p, toField $ post_title p, toField $ post_usr_fk p]
@@ -94,7 +94,6 @@ someRoute = do
         , "</head>"
         , "<html>"
         , "<div id='react_hook'></div>"
-        , "<p>", wtf, "</p>"
         , "</html>"  
         , "<script src='/frontend.js'></script>"
         ]
@@ -133,7 +132,9 @@ pinsHandler :: Usr -> MyHandler ()
 pinsHandler user = S.method S.GET $ do
     posts <- S.with db $ PSql.query "select * from post where usr_id = ?" (PSql.Only $ usr_id user) :: MyHandler [Post]
     let to_string = toStrict $ Aeson.encode posts
-    S.writeBS $ ByteString.concat ["so yeah; ", "fuck persistent: ", to_string]
+    -- S.writeBS $ ByteString.concat ["so yeah; ", "fuck persistent: ", to_string]
+    S.modifyResponse $ S.setHeader "Content-Type" "application/json"
+    S.writeBS to_string
     -- S.writeBS "yeah"
 
 addPinHandler :: Usr -> MyHandler ()
@@ -142,7 +143,7 @@ addPinHandler user = S.method S.POST $ do
     S.modifyResponse $ S.setHeader "Content-Type" "application/json"
     case uh of 
         Just (LinkInput url title) -> do
-            let post = Post url title (usr_id user)
+            let post = Post Nothing url title (usr_id user)
             S.with db $ PSql.execute "insert into post (url, title, usr_id) values (?, ?, ?)" post
             -- S.writeBS "uh"
             return ()
