@@ -3,6 +3,8 @@ var request = require('superagent');
 var PostList = require('./PostList.jsx');
 var CreatePost = require('./CreatePost.jsx');
 
+window.request = request;
+
 var LoggedIn = React.createClass({
 
 	getInitialState: function() {

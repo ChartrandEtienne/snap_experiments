@@ -30,7 +30,6 @@ import Snap.Util.FileServe (serveDirectory, serveFile)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as Text
-import qualified MyDatabase as MyDatabase
 
 import qualified Data.Aeson as Aeson
 import Data.Aeson ((.=))
@@ -49,6 +48,20 @@ data App = App
     }
 
 Lens.makeLenses ''App
+
+data InsertVisit = InsertVisit { iv_url :: Text.Text, iv_usr_id :: Int } deriving (Show)
+
+data GetInsertVisit = GetInsertVisit { giv_url :: Text.Text } deriving (Show)
+
+makeInsertVisit id iv = InsertVisit (giv_url iv) id
+
+instance Aeson.FromJSON GetInsertVisit where
+    parseJSON (Aeson.Object v) = 
+        GetInsertVisit CApp.<$> v Aeson..: "url"
+    parseJSON _ = mzero
+
+instance PSql.ToRow InsertVisit where
+    toRow p = [toField $ iv_url p, toField $ iv_usr_id p]
 
 data LinkInput = LinkInput { url :: Text.Text, title :: Text.Text } deriving (Show)
 
@@ -115,9 +128,21 @@ authHandler = do
         _ -> return ()
     S.redirect "/"
     
+headerAuth :: (Usr -> MyHandler ()) -> MyHandler ()
+headerAuth success = do
+    req <- S.getRequest
+    let header = S.getHeader "userid" req
+    case header of 
+        Just userid -> do
+            maybe_usr <- maybe_user $ decodeUtf8 userid
+            -- let maybe_usr =  Just "ught"
+            case maybe_usr of
+                Just usr -> success $ usr
+                _ -> S.writeBS "nope here"
+        Nothing -> S.writeBS "nope"
 
-auth :: (Usr -> MyHandler ()) -> MyHandler ()
-auth success = do
+cookieAuth :: (Usr -> MyHandler ()) -> MyHandler ()
+cookieAuth success = do
     maybe_sess <- S.with sess $ Sess.getFromSession "user"
     case maybe_sess of 
         Just sess -> do
@@ -127,6 +152,8 @@ auth success = do
                 _ -> S.writeBS "nope here"
         _ -> S.writeBS "nope there"
 
+headerHandler :: Usr -> MyHandler() 
+headerHandler user = S.writeBS "YES"
 
 pinsHandler :: Usr -> MyHandler () 
 pinsHandler user = S.method S.GET $ do
@@ -136,6 +163,17 @@ pinsHandler user = S.method S.GET $ do
     S.modifyResponse $ S.setHeader "Content-Type" "application/json"
     S.writeBS to_string
     -- S.writeBS "yeah"
+
+addVisitHandler :: Usr -> MyHandler ()
+addVisitHandler user = S.method S.POST $ do
+    uh <- Aeson.decode `fmap` S.readRequestBody 100000 :: MyHandler (Maybe GetInsertVisit)
+    case uh of 
+        Just (GetInsertVisit url) -> do
+            let insert_visit = InsertVisit url (usr_id user)
+            S.with db $ PSql.execute "insert into visit (url, usr_id) values (?, ?)" insert_visit
+            return ()
+        Nothing -> return ()
+    S.writeBS "erm"
 
 addPinHandler :: Usr -> MyHandler ()
 addPinHandler user = S.method S.POST $ do
@@ -156,8 +194,10 @@ addPinHandler user = S.method S.POST $ do
 routes = 
     [ ("/", someRoute)
     , ("/login", authHandler)
-    , ("/pins/add", auth addPinHandler)
-    , ("/pins", auth pinsHandler)
+    , ("/pins/add", cookieAuth addPinHandler)
+    , ("/visit/add", headerAuth addVisitHandler)
+    , ("/visit/header", headerAuth headerHandler)
+    , ("/pins", cookieAuth pinsHandler)
     , ("/frontend.js", serveFile "./frontend/dist/app.js")
     ]
 

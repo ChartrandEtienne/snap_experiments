@@ -9,3 +9,4 @@ CREATE TABLE post (
 	title TEXT,
 	usr_id integer REFERENCES usr (id)
 );
+
