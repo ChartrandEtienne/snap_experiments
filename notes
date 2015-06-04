@@ -1,0 +1,98 @@
+All right. 
+
+Let's state goal 1:
+	Let the user specify which strips should be tracked
+	Display to the user a list of the strips of a given comic they visited, when visiting a strip of that comic
+
+Steps:
+
+1) save every godforsaken URL the user visits. 
+	done
+2) determine whether a given URL is, or is not, part of a given comic
+3) show them to the user in like, chronological order
+
+Step 2 is kind of tricky. 
+
+Let's dump some examples. 
+
+1) Darths & Droids
+
+http://www.darthsanddroids.net/episodes/0005.html
+http://www.darthsanddroids.net/episodes/1203.html
+
+<p>
+	<a class="darth" href="/episodes/0001.html">&lt;&lt;FIRST</a> &nbsp; &nbsp;
+	<a class="darth" href="/episodes/1202.html">&lt;PREVIOUS</a> &nbsp; &nbsp;
+	<a class="darth" href="/episodes/1204.html">NEXT&gt;</a> &nbsp; &nbsp;
+	<a class="darth" href="/">LATEST&gt;&gt;</a>
+</p>
+
+/html/body/div[1]/p[3]/a[3]
+
+2) Gunnerkrigg Court
+http://www.gunnerkrigg.com/?p=1
+http://www.gunnerkrigg.com/?p=870
+http://www.gunnerkrigg.com/?p=1522
+
+<div class="nav">
+	<a href="?p=745"><img src="http://www.gunnerkrigg.com/images/next_a.jpg" alt=""></a>
+</div>
+
+/html/body/div[2]/div[2]/a
+
+3) Dresden Kodak
+
+http://dresdencodak.com/2005/06/08/the-tomorrow-man/
+http://dresdencodak.com/2010/05/06/smbc-guest-comic/
+http://dresdencodak.com/2015/02/10/dark-science-40/
+http://dresdencodak.com/2015/06/01/dark-science-47/
+
+4) Homestuck
+http://www.mspaintadventures.com/?s=6
+http://www.mspaintadventures.com/?s=6&p=001902
+http://www.mspaintadventures.com/?s=6&p=001903
+http://www.mspaintadventures.com/?s=6&p=004449
+http://www.mspaintadventures.com/?s=6&p=009534
+http://www.mspaintadventures.com/index_hscrollb.php?s=6&p=009535
+
+<a href="?s=6&p=009518">[A6A6I5] ====></a>
+
+5) Problem Sleuth
+
+http://www.mspaintadventures.com/?s=4
+http://www.mspaintadventures.com/?s=4&p=000220
+http://www.mspaintadventures.com/?s=4&p=001881
+
+http://www.mspaintadventures.com/?s=4&p=001892
+
+<a href="?s=4&p=001801">Next.</a>
+
+6) El Goonish Shive
+
+http://www.egscomics.com/index.php?id=1
+http://www.egscomics.com/index.php?id=489
+http://www.egscomics.com/index.php?id=2058
+
+<a href="/index.php?id=2058" class="last" rel="index"></a>
+
+//*[@id="leftarea"]/div[3]/a[4]
+
+7) El Goonish Shive: Newspaper
+
+http://www.egscomics.com/egsnp.php?id=12
+http://www.egscomics.com/egsnp.php?id=13
+http://www.egscomics.com/egsnp.php?id=311
+
+<a href="/egsnp.php?id=311" class="next" rel="next"></a>
+//*[@id="wrapper"]/div[4]/div[2]/a[3]
+
+8) Dilbert
+
+http://dilbert.com/strip/1989-04-16
+http://dilbert.com/strip/1999-01-01
+http://dilbert.com/strip/2015-06-03
+
+<a href="/strip/1999-01-02" alt="Newer Strip">
+	<i class="fa fa-caret-right fa-5x"></i>
+	<span class="nav-comic-text"> Newer Strip</span>
+</a>
