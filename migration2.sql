@@ -3,5 +3,5 @@ CREATE TABLE visit (
 	url TEXT,
 	datetime TIMESTAMP DEFAULT NOW(),
 	usr_id integer REFERENCES login (id)
-)
+);
 

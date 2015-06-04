@@ -32,6 +32,7 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Text as Text
 
 import qualified Data.Aeson as Aeson
+
 import Data.Aeson ((.=))
 
 import qualified Control.Monad.State as MonadState
@@ -39,6 +40,7 @@ import qualified Control.Monad.Trans.Reader as MonadReader
 import qualified Control.Monad.Logger as MonadLogger
 import qualified Control.Monad.Trans.Resource as MonadResource
 import qualified Snap.Snaplet.PostgresqlSimple as PSql
+import qualified Database.PostgreSQL.Simple.Time as PSQLTime
 import Database.PostgreSQL.Simple.Types 
 import Database.PostgreSQL.Simple.ToField
 
@@ -48,6 +50,24 @@ data App = App
     }
 
 Lens.makeLenses ''App
+
+data Comic = Comic { c_id :: Int, c_url_prefix :: Text.Text } deriving (Show)
+
+instance PSql.FromRow Comic where
+    fromRow = Comic CApp.<$> PSql.field CApp.<*> PSql.field
+
+data Visit = Visit { v_id :: Int, v_url :: Text.Text, v_datetime :: PSQLTime.LocalTimestamp } deriving (Show)
+
+instance PSql.FromRow Visit where 
+    fromRow = Visit CApp.<$> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field 
+
+-- fucking date
+instance Aeson.ToJSON Visit where
+    toJSON (Visit id url datetime) = Aeson.object ["url" .= url, "timestamp" .= datetime] 
+
+instance Aeson.ToJSON PSQLTime.LocalTimestamp where
+    toJSON (PSQLTime.Finite ts) = Aeson.object ["fuck" .= (show ts)]
+    toJSON _ = Aeson.object ["fuck" .= ("rekt" :: String)]
 
 data InsertVisit = InsertVisit { iv_url :: Text.Text, iv_usr_id :: Int } deriving (Show)
 
@@ -118,6 +138,7 @@ maybe_user name = do
         [Usr id login] -> return $ Just $ Usr id login
         _ -> return Nothing
 
+
 authHandler :: MyHandler ()
 authHandler = do
     maybe_name <- S.getPostParam "user"
@@ -151,6 +172,14 @@ cookieAuth success = do
                 Just usr -> success $ usr
                 _ -> S.writeBS "nope here"
         _ -> S.writeBS "nope there"
+
+searchVisitsHandler :: Usr -> MyHandler()
+searchVisitsHandler user = S.method S.GET $ do
+    murl <- S.getParam "url"
+    case murl of 
+        Just url -> do 
+            comic <- S.with db $ PSql.query "select * from comic where = ?" (PSql.Only $ usr_id user) :: MyHandler [Post]
+        Nothing -> S.writeBS "none"
 
 headerHandler :: Usr -> MyHandler() 
 headerHandler user = S.writeBS "YES"
@@ -195,6 +224,7 @@ routes =
     [ ("/", someRoute)
     , ("/login", authHandler)
     , ("/pins/add", cookieAuth addPinHandler)
+    , ("/urgh", cookieAuth searchVisitsHandler)
     , ("/visit/add", headerAuth addVisitHandler)
     , ("/visit/header", headerAuth headerHandler)
     , ("/pins", cookieAuth pinsHandler)
