@@ -10,6 +10,35 @@ var gutil = require('gulp-util');
 
 gulp.task('browserify', function() {
 
+	var popup_bundler = browserify({
+		entries: ["./extension/src/popup.js"],
+		debug: true, // Gives us sourcemapping
+		cache: {}, packageCache: {}, fullPaths: true // Requirement of watchify
+	}).transform('reactify', {stripTypes: true});
+	var popup_watcher = watchify(popup_bundler);
+
+	var popup = popup_watcher
+	.on('update', function () {
+		var updateStart = Date.now();
+		console.log('Updating!');
+		popup_watcher.bundle()
+		.on('error', function(e) {
+			gutil.log(gutil.colors.red('Bundle error:', e.message));
+		})
+// Create new bundle that uses the cache for high performance
+		.pipe(source('popup.js'))
+		// This is where you add uglifying etc.
+		.pipe(gulp.dest("./extension"));
+		console.log('Updated!', (Date.now() - updateStart) + 'ms');
+	})
+	// Create the initial bundle when starting the task
+	.bundle()
+	.on('error', function(e) {
+		gutil.log(gutil.colors.red('Bundle error:', e.message));
+	})
+	.pipe(source('popup.js'))
+	.pipe(gulp.dest("./extension"));
+
 	var dashboard_bundler = browserify({
 		entries: ["./frontend/src/Main.jsx"],
 		debug: true, // Gives us sourcemapping

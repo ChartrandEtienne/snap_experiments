@@ -56,17 +56,16 @@ data Comic = Comic { c_id :: Int, c_url_prefix :: Text.Text } deriving (Show)
 instance PSql.FromRow Comic where
     fromRow = Comic CApp.<$> PSql.field CApp.<*> PSql.field
 
-data Visit = Visit { v_id :: Int, v_url :: Text.Text, v_datetime :: PSQLTime.LocalTimestamp } deriving (Show)
+data Visit = Visit { v_id :: Int, v_url :: Text.Text, v_datetime :: PSQLTime.LocalTimestamp, v_user_id :: Int } deriving (Show)
 
 instance PSql.FromRow Visit where 
-    fromRow = Visit CApp.<$> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field 
+    fromRow = Visit CApp.<$> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field
 
--- fucking date
 instance Aeson.ToJSON Visit where
-    toJSON (Visit id url datetime) = Aeson.object ["url" .= url, "timestamp" .= datetime] 
+    toJSON (Visit id url datetime usr_id) = Aeson.object ["url" .= url, "timestamp" .= datetime] 
 
 instance Aeson.ToJSON PSQLTime.LocalTimestamp where
-    toJSON (PSQLTime.Finite ts) = Aeson.object ["fuck" .= (show ts)]
+    toJSON (PSQLTime.Finite ts) = Aeson.String $ Text.pack $ show ts
     toJSON _ = Aeson.object ["fuck" .= ("rekt" :: String)]
 
 data InsertVisit = InsertVisit { iv_url :: Text.Text, iv_usr_id :: Int } deriving (Show)
@@ -178,7 +177,14 @@ searchVisitsHandler user = S.method S.GET $ do
     murl <- S.getParam "url"
     case murl of 
         Just url -> do 
-            comic <- S.with db $ PSql.query "select * from comic where = ?" (PSql.Only $ usr_id user) :: MyHandler [Post]
+            comics <- S.with db $ PSql.query "select * from comic where strpos(?, url_prefix) != 0" (PSql.Only murl) :: MyHandler [Comic]
+            case comics of 
+                [comic] -> do
+                    visits <- S.with db $ PSql.query "select * from visit where strpos(url, ?) != 0" (PSql.Only $ c_url_prefix comic) :: MyHandler [Visit]
+
+                    S.modifyResponse $ S.setHeader "Content-Type" "application/json"
+                    S.writeBS $ toStrict $ Aeson.encode visits
+                _ -> S.writeBS "none part deux"
         Nothing -> S.writeBS "none"
 
 headerHandler :: Usr -> MyHandler() 
@@ -224,7 +230,7 @@ routes =
     [ ("/", someRoute)
     , ("/login", authHandler)
     , ("/pins/add", cookieAuth addPinHandler)
-    , ("/urgh", cookieAuth searchVisitsHandler)
+    , ("/visit/search", cookieAuth searchVisitsHandler)
     , ("/visit/add", headerAuth addVisitHandler)
     , ("/visit/header", headerAuth headerHandler)
     , ("/pins", cookieAuth pinsHandler)

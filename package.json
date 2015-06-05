@@ -4,7 +4,7 @@
     "version": "0.0.0",
     "dependencies": {
         "react": "^0.12.2",
-		"superagent": "*"
+	"superagent": "*"
     },
     "devDependencies": {
         "browserify": "^8.1.3",
