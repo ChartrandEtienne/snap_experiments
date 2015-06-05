@@ -27,3 +27,6 @@ cabal.sandbox.config
 *.aux
 *.hp
 
+./extension/background.js
+./extension/content.js
+./extension/popup.js
