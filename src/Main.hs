@@ -35,6 +35,8 @@ import qualified Data.Aeson as Aeson
 
 import Data.Aeson ((.=))
 
+import qualified Crypto.PasswordStore as PWord
+
 import qualified Control.Monad.State as MonadState
 import qualified Control.Monad.Trans.Reader as MonadReader
 import qualified Control.Monad.Logger as MonadLogger
@@ -84,7 +86,7 @@ instance PSql.ToRow InsertVisit where
 
 data LinkInput = LinkInput { url :: Text.Text, title :: Text.Text } deriving (Show)
 
-data Usr = Usr { usr_id :: Int, usr_login :: String } deriving (Show)
+data Usr = Usr { usr_id :: Int, usr_login :: String, usr_password :: String, usr_apikey :: String } deriving (Show)
 
 data Post = Post { post_id :: Maybe Int, post_url :: Text.Text, post_title :: Text.Text, post_usr_fk :: Int } deriving (Show)
 
@@ -92,7 +94,7 @@ instance Aeson.ToJSON Post where
     toJSON (Post post_id post_url post_title post_usr_fk) = Aeson.object ["url" .= post_url, "title" .= post_title]
 
 instance PSql.FromRow Usr where
-    fromRow = Usr CApp.<$> PSql.field CApp.<*> PSql.field
+    fromRow = Usr CApp.<$> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field
 
 instance PSql.FromRow Post where
     fromRow = Post CApp.<$> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field CApp.<*> PSql.field 
@@ -132,21 +134,53 @@ someRoute = do
 
 maybe_user :: Text.Text -> MyHandler (Maybe Usr)
 maybe_user name = do
-    onePossibleUser <- S.with db $ PSql.query "select * from login where login = ?" (PSql.Only name) :: MyHandler [Usr]
+    onePossibleUser <- S.with db $ PSql.query "select * from login where apikey = ?" (PSql.Only name) :: MyHandler [Usr]
     case onePossibleUser of 
-        [Usr id login] -> return $ Just $ Usr id login
+        [Usr id login password apikey] -> return $ Just $ Usr id login password apikey
         _ -> return Nothing
-
 
 authHandler :: MyHandler ()
 authHandler = do
-    maybe_name <- S.getPostParam "user"
-    let name = decodeUtf8 $ fromMaybe "" maybe_name
-    onePossibleUser <- S.with db $ PSql.query "select * from login where login = ?" (PSql.Only name :: PSql.Only Text.Text) :: MyHandler [Usr]
+
+    maybe_login <- S.getPostParam "login"
+    maybe_password <- S.getPostParam "password"
+
+    case (fmap decodeUtf8 maybe_login, maybe_password) of
+        (Just login, Just given_password) -> do
+            onePossibleUser <- S.with db $ PSql.query "select * from login where login = ?" (PSql.Only login :: PSql.Only Text.Text) :: MyHandler [Usr]
+            case onePossibleUser of 
+                [Usr id login password apikey] -> do
+                    case PWord.verifyPassword given_password (pack password) of 
+                        True -> S.with sess $ Sess.setInSession "user" (Text.pack apikey) >> Sess.commitSession >> return ()
+                        False -> return ()
+                _ -> return ()
+        _ -> S.writeBS "not okay"
+
+    {- 
+    let login = decodeUtf8 $ fromMaybe "" maybe_login
+    onePossibleUser <- S.with db $ PSql.query "select * from login where login = ?" (PSql.Only login :: PSql.Only Text.Text) :: MyHandler [Usr]
     case onePossibleUser of 
-        [Usr id login] -> S.with sess $ Sess.setInSession "user" (Text.pack login) >> Sess.commitSession
+        [Usr id login password apikey] -> S.with sess $ Sess.setInSession "user" (Text.pack login) >> Sess.commitSession
         _ -> return ()
+    -}
     S.redirect "/"
+
+registerHandler :: MyHandler ()
+registerHandler = do
+    maybe_login <- S.getPostParam "login"
+    maybe_password <- S.getPostParam "password"
+    case (fmap decodeUtf8 maybe_login, maybe_password) of
+        (Just login, Just password) -> do
+            hopefullyNobody <- S.with db $ PSql.query "select * from login where login = ?" (PSql.Only login :: PSql.Only Text.Text) :: MyHandler [Usr]
+            case hopefullyNobody of 
+                [] -> do
+                    paword <- liftIO $ PWord.makePassword password 10
+                    S.with db $ PSql.execute "insert into login (login, password) values (?, ?)" (login, paword)
+                    S.redirect "/"
+                _ -> S.writeBS "SOMEBODY EXISTS"
+        _ -> S.writeBS "I NEED USERNAME PAWORD"
+
+    
     
 headerAuth :: (Usr -> MyHandler ()) -> MyHandler ()
 headerAuth success = do
@@ -229,6 +263,7 @@ addPinHandler user = S.method S.POST $ do
 routes = 
     [ ("/", someRoute)
     , ("/login", authHandler)
+    , ("/register", registerHandler)
     , ("/pins/add", cookieAuth addPinHandler)
     , ("/visit/search", cookieAuth searchVisitsHandler)
     , ("/visit/add", headerAuth addVisitHandler)
