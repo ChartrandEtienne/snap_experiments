@@ -1,0 +1,1 @@
+rsync -vr haskell/dist_haskelboard hcoop:haskelboard
