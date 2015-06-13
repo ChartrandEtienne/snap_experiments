@@ -114,6 +114,9 @@ instance Aeson.FromJSON LinkInput where
 
 type MyHandler a = S.Handler App App a
 
+pleaseWork :: MyHandler ()
+pleaseWork = S.writeBS "okay"
+
 someRoute :: MyHandler ()
 someRoute = do
     posts <- S.with db $ PSql.query_ "select 2 + 2" 
@@ -261,7 +264,8 @@ addPinHandler user = S.method S.POST $ do
     S.writeBS $ ByteString.concat ["okay", pack $ show uh]
 
 routes = 
-    [ ("/", someRoute)
+    [ ("/someroute", someRoute)
+    , ("/", pleaseWork)
     , ("/login", authHandler)
     , ("/register", registerHandler)
     , ("/pins/add", cookieAuth addPinHandler)
@@ -280,7 +284,10 @@ app = Snaplet.makeSnaplet "app" "yeah" Nothing $ do
     d <- S.nestSnaplet "db" db PSql.pgsInit
     return $ App s d
 
-main = Snaplet.serveSnaplet S.defaultConfig app
+main = do
+    Snaplet.serveSnaplet S.defaultConfig app
+
+
 
 {- 
 main = do
